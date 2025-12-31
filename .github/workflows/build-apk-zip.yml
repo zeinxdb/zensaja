@@ -1,0 +1,87 @@
+name: Build Flutter APK from ZIP (FINAL FIX)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Install unzip
+      - name: Install unzip
+        run: sudo apt-get update && sudo apt-get install unzip -y
+
+      # 3. Extract ZIP (jika ada)
+      - name: Extract ZIP
+        run: |
+          for f in *.zip; do
+            echo "Extracting $f"
+            unzip -o "$f"
+          done
+
+      # 4. Cari pubspec.yaml
+      - name: Detect Flutter project
+        run: |
+          find . -name pubspec.yaml
+
+      # 5. Set folder Flutter
+      - name: Set Flutter project dir
+        run: |
+          DIR=$(find . -name pubspec.yaml | head -n 1 | xargs dirname)
+          if [ -z "$DIR" ]; then
+            echo "❌ pubspec.yaml not found"
+            exit 1
+          fi
+          echo "PROJECT_DIR=$DIR" >> $GITHUB_ENV
+          echo "Flutter project: $DIR"
+
+      # 6. Setup Java 17
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # 7. Setup Flutter (stable)
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: stable
+
+      # 8. Fix Gradle memory + disable daemon
+      - name: Fix Gradle memory
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          echo "org.gradle.daemon=false" >> android/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx1536m -XX:MaxMetaspaceSize=512m" >> android/gradle.properties
+          echo "android.useAndroidX=true" >> android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
+
+      # 9. Flutter pub get
+      - name: Flutter pub get
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: flutter pub get
+
+      # 10. Build APK SUPER AMAN (LOW MEMORY)
+      - name: Build APK (SAFE MODE)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          flutter build apk \
+            --split-per-abi \
+            --no-shrink \
+            --no-tree-shake-icons
+
+      # 11. Upload APK
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-apk
+          path: |
+            **/build/app/outputs/flutter-apk/*.apk
