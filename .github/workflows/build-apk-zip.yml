@@ -1,0 +1,80 @@
+name: Build Flutter APK from ZIP (FINAL FIX)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Install unzip
+      - name: Install unzip
+        run: sudo apt-get update && sudo apt-get install unzip -y
+
+      # 3. Extract ZIP
+      - name: Extract ZIP
+        run: |
+          for f in *.zip; do
+            unzip -o "$f"
+          done
+
+      # 4. Detect Flutter project
+      - name: Detect Flutter project
+        run: find . -name pubspec.yaml
+
+      # 5. Set Flutter project dir
+      - name: Set Flutter project dir
+        run: |
+          DIR=$(find . -name pubspec.yaml | head -n 1 | xargs dirname)
+          echo "PROJECT_DIR=$DIR" >> $GITHUB_ENV
+          echo "Flutter project at $DIR"
+
+      # 6. Setup Java 17
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # 🔥 7. SETUP FLUTTER (FIX UTAMA DI SINI)
+      - name: Setup Flutter (PIN VERSION)
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.3'
+          cache: true
+
+      # 8. Fix Gradle memory
+      - name: Fix Gradle memory
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          echo "org.gradle.daemon=false" >> android/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx1536m" >> android/gradle.properties
+
+      # 9. Flutter pub get
+      - name: Flutter pub get
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: flutter pub get
+
+      # 10. Build APK (LOW MEMORY SAFE)
+      - name: Build APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          flutter build apk \
+            --split-per-abi \
+            --no-shrink \
+            --no-tree-shake-icons
+
+      # 11. Upload APK
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-apk
+          path: |
+            **/build/app/outputs/flutter-apk/*.apk
