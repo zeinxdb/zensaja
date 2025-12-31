@@ -1,0 +1,51 @@
+name: Flutter Build APK (ZIP)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Install unzip
+        run: sudo apt-get install unzip -y
+
+      - name: Extract Project ZIP
+        run: |
+          unzip *.zip
+          rm *.zip
+
+      - name: Detect Flutter Project
+        run: ls -la
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+
+      - name: Flutter Doctor
+        run: flutter doctor
+
+      - name: Flutter Pub Get
+        run: flutter pub get
+
+      - name: Build APK (Release)
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
